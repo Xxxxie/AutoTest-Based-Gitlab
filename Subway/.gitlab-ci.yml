@@ -1,0 +1,79 @@
+variables:
+  PROJECT_NAME: $CI_PROJECT_NAME
+  UNIT_TEST_NAME: 'SubwayTest'
+  PWD: $CI_PROJECT_DIR
+  OUTPUT: $CI_PROJECT_DIR\bin
+
+stages:
+  - build
+  - test
+  - testauto
+  - report
+
+before_script:
+  - chcp 65001
+
+.common_template: &common_config
+  only:
+    - tags
+    - api
+
+build_job:
+  tags:
+    - MSBuild
+  stage: build
+  script:
+    - msbuild -p:OutDir=%OUTPUT%;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.17134.0;Configuration=Release
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - "%OUTPUT%\\%PROJECT_NAME%.exe"
+
+
+unit_test_job:
+  tags: 
+    - MSBuild
+  stage: test
+  script:
+    - cd %PROJECT_NAME%
+    - dir
+    # 编译静态链接库用于单元测试
+    - msbuild -p:OutDir=%OUTPUT%;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.17134.0;Configuration=Release;ConfigurationType=StaticLibrary
+    - cd ..
+    - cd %UNIT_TEST_NAME%
+    - dir
+    - msbuild -p:OutDir=%OUTPUT%;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.17134.0;Configuration=Release;ConfigurationType=DynamicLibrary
+    - cd %OUTPUT%
+    - dir
+    - vstest.console %UNIT_TEST_NAME%.dll /logger:trx;verbosity=minimal;LogFileName=unittest.trx /ResultsDirectory:.\
+    - move unittest.trx %PWD%
+  artifacts:
+    paths:
+      - "%PWD%\\unittest.trx"
+      
+test_job:
+  <<: *common_config
+  tags:
+    - MSBuild
+  stage: testauto
+  script:
+    - SubwayAutoTest -number %GITLAB_USER_LOGIN%
+  dependencies:
+    - build_job
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - score.json
+
+report_job:
+  <<: *common_config
+  tags:
+    - Build Server
+  stage: report
+  script:
+    - AutoTestReport -p %CI_PROJECT_ID%
+  when: always
+  retry:  2
+  dependencies:
+    - unit_test_job
+    - test_job
