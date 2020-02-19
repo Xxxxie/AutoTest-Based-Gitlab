@@ -1,0 +1,33 @@
+variables:
+  PROJECT_NAME: $CI_PROJECT_NAME                    #当前项目的名称
+  PWD: $CI_PROJECT_DIR                              #当前项目所在文件夹
+  OUTPUT: $CI_PROJECT_DIR\bin                       #生成的可执行文件存放的文件夹
+  DEPLOY_FOLDER: C:\setp-test-tools                 #项目部署在服务器中的位置
+
+stages:                                             #定义工作场景的阶段
+  - build
+  - deploy
+
+before_script:                                      #在作业执行之前的命令或脚本
+  - chcp 65001                                      #设置活动代码页为UTF-8代码页
+
+build_job:                                          #在build阶段完成的工作
+  tags:
+    - MSBuild
+  stage: build
+  script:                                           #编译生成当前项目的可执行文件，并存放在 当前项目文件夹\bin 文件夹下面
+    - nuget restore                                     
+    - msbuild -p:OutDir=%OUTPUT%;PlatformToolset=v141;WindowsTargetPlatformVersion=10.0.17134.0;Configuration=Release;TargetFrameworkVersion=4.5.1
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - "%OUTPUT%\\%PROJECT_NAME%.exe"
+      - "%OUTPUT%\\*.dll"
+
+deploy_job:                                         #在deploy阶段完成的工作
+  tags:
+    - MSBuild
+  stage: deploy
+  script:                                           #将生成的文件复制到项目部署在服务器中指定的文件夹下面
+    - copy "%OUTPUT%\\%PROJECT_NAME%.exe" %DEPLOY_FOLDER%
+    - copy "%OUTPUT%\\*.dll" %DEPLOY_FOLDER%
